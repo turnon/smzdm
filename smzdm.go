@@ -5,32 +5,41 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
 )
 
 type entry struct {
-	s *goquery.Selection
+	search             *search
+	time, title, price string
 }
 
-func (e *entry) toStr() string {
-	title := strings.TrimSpace(e.s.Find(".feed-block-title a").First().Text())
-	price := strings.TrimSpace(e.s.Find(".feed-block-title a div").First().Text())
-	timeBlock := e.s.Find(".feed-block-extras").First()
+func newEntry(selection *goquery.Selection) *entry {
+	title := strings.TrimSpace(selection.Find(".feed-block-title a").First().Text())
+	price := strings.TrimSpace(selection.Find(".feed-block-title a div").First().Text())
+	timeBlock := selection.Find(".feed-block-extras").First()
 	timeBlock.Children().Remove()
 	time := strings.TrimSpace(timeBlock.Text())
-	return time + " " + title + " " + price
+	return &entry{time: time, title: title, price: price}
+}
+
+func (e *entry) printf() {
+	fmt.Printf(e.search.getFormatStr(), e.time, e.title, e.price)
 }
 
 type search struct {
-	keyword string
+	keyword                     string
+	entries                     []*entry
+	timeLen, titleLen, priceLen int
+	formatStr                   string
 }
 
 func (s *search) process() {
 	keyword := url.QueryEscape(s.keyword)
 
-	resp, err := http.Get("http://search.smzdm.com/?c=home&s=" + keyword + "&v=b")
+	resp, err := http.Get("http://search.smzdm.com/?c=home&v=b&s=" + keyword)
 
 	if err != nil {
 		panic(err)
@@ -46,10 +55,42 @@ func (s *search) process() {
 
 	s.printKeyword()
 
-	doc.Find("#feed-main-list .z-feed-content").Each(func(i int, s *goquery.Selection) {
-		record := (&entry{s}).toStr()
-		fmt.Println(record)
+	doc.Find("#feed-main-list .z-feed-content").Each(func(i int, selection *goquery.Selection) {
+		s.append(newEntry(selection))
 	})
+
+	for _, e := range s.entries {
+		e.printf()
+	}
+}
+
+func (s *search) append(e *entry) {
+	timeLen := len(e.time)
+	if s.timeLen < timeLen {
+		s.timeLen = timeLen
+	}
+
+	titleLen := len(url.QueryEscape(e.title))
+	if s.titleLen < titleLen {
+		s.titleLen = titleLen
+	}
+
+	priceLen := len(url.QueryEscape(e.price))
+	if s.priceLen < priceLen {
+		s.priceLen = priceLen
+	}
+
+	e.search = s
+	s.entries = append(s.entries, e)
+}
+
+func (s *search) getFormatStr() string {
+	if s.formatStr == "" {
+		s.formatStr = "%" + strconv.Itoa(s.timeLen) + "s | " +
+			"%" + strconv.Itoa(s.titleLen) + "s | " +
+			"%" + strconv.Itoa(s.priceLen) + "s\n"
+	}
+	return s.formatStr
 }
 
 func (s *search) printKeyword() {
@@ -70,6 +111,6 @@ func main() {
 		if i > 0 {
 			fmt.Println()
 		}
-		(&search{k}).process()
+		(&search{keyword: k}).process()
 	}
 }
