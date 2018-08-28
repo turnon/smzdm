@@ -14,5 +14,6 @@ FROM alpine:latest
 WORKDIR /root/
 COPY --from=builder /smzdm .
 RUN chmod +x /root/smzdm
+RUN apk update && apk add tzdata
 
 ENTRYPOINT ["/root/smzdm"]
