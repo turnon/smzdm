@@ -1,4 +1,4 @@
-package search
+package smzdm
 
 import (
 	"net/http"
